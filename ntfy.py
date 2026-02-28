@@ -122,6 +122,12 @@ def cmd_send(args):
             session_id = payload.get("session_id")
         if not title:
             title = payload.get("title")
+        # Prepend project name (basename of cwd) to title for easy identification
+        # when running multiple agents, e.g. "ntfy_scheduler · Permission needed"
+        cwd = payload.get("cwd")
+        if cwd:
+            project = os.path.basename(cwd)
+            title = f"{project} - {title}" if title else project
 
     if not message:
         print("No message provided.", file=sys.stderr)
