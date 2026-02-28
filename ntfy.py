@@ -156,7 +156,11 @@ def cmd_debug_off(args):
     config = load_config()
     config["debug"] = False
     save_config(config)
-    print("Debug logging disabled.")
+    if os.path.exists(LOG_PATH):
+        os.remove(LOG_PATH)
+        print(f"Debug logging disabled. Log file {LOG_PATH} cleared.")
+    else:
+        print("Debug logging disabled.")
 
 
 def cmd_send(args):
@@ -170,6 +174,7 @@ def cmd_send(args):
     session_id = args.session_id
     title = args.title
     cwd = None
+    transcript_path = None
 
     # Read Claude Code hook JSON from stdin when message is "-"
     if message == "-":
@@ -186,6 +191,7 @@ def cmd_send(args):
         if cwd:
             project = os.path.basename(cwd)
             title = f"{project} - {title}" if title else project
+        transcript_path = payload.get("transcript_path")
 
     if not message:
         log("send: no message provided")
@@ -219,6 +225,7 @@ def cmd_send(args):
             "scheduled_at": time.time(),
             "delay": args.delay,
             "cwd": cwd,
+            "transcript_path": transcript_path,
         }
         save_state(state)
         log(f"send: scheduled session_id={session_id!r} PID={proc.pid} delay={args.delay}s cwd={cwd!r}")
@@ -231,12 +238,14 @@ def cmd_send(args):
 
 def cmd_cancel(args):
     session_id = args.session_id
+    cancel_transcript_path = None
 
     # Read session_id from Claude Code hook JSON when "-" is passed
     if session_id == "-":
         payload = parse_hook_stdin()
         session_id = payload.get("session_id")
-        log(f"cancel: stdin payload keys={list(payload.keys())} session_id={session_id!r}")
+        cancel_transcript_path = payload.get("transcript_path")
+        log(f"cancel: stdin payload keys={list(payload.keys())} session_id={session_id!r} transcript_path={cancel_transcript_path!r}")
     else:
         log(f"cancel: session_id={session_id!r} from argument")
 
@@ -248,6 +257,17 @@ def cmd_cancel(args):
     state = load_state()
     log(f"cancel: pending sessions={list(state.keys())}")
     entry = state.get(session_id)
+
+    # Fall back to transcript_path matching when session_id doesn't match.
+    # PreToolUse and Notification hooks can have different session_ids for the
+    # same Claude Code instance, but share the same transcript_path.
+    if entry is None and cancel_transcript_path:
+        for sid, e in list(state.items()):
+            if isinstance(e, dict) and e.get("transcript_path") == cancel_transcript_path:
+                log(f"cancel: matched via transcript_path={cancel_transcript_path!r}, using session_id={sid!r}")
+                session_id = sid
+                entry = e
+                break
 
     if entry is None:
         log(f"cancel: no match for session_id={session_id!r}, nothing to cancel")

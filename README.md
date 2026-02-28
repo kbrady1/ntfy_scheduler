@@ -6,12 +6,13 @@ A lightweight CLI for sending and scheduling push notifications via [ntfy.sh](ht
 
 ## How it works
 
-Two Claude Code hooks work together:
+Three Claude Code hooks work together:
 
 1. **Notification hook** — when Claude needs your input, a notification is *scheduled* with a configurable delay. If you don't respond in time, it fires.
-2. **UserPromptSubmit hook** — when you submit a new prompt, any pending notification for that session is cancelled before it sends.
+2. **UserPromptSubmit hook** — when you submit a new prompt, any pending notification for that session is cancelled.
+3. **PreToolUse hook** — when you approve a permission request (or any tool runs), the pending notification is also cancelled.
 
-This prevents notification spam when you're already at your keyboard, while still alerting you on your phone when you've walked away.
+Together, `UserPromptSubmit` and `PreToolUse` cover all the ways you can re-engage with Claude — typing a message or approving a tool permission — so the notification is reliably cancelled whenever you're back at your keyboard.
 
 ---
 
@@ -179,6 +180,16 @@ Alternatively, add the following directly to `~/.claude/settings.json`:
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ntfyScheduler cancel -"
+          }
+        ]
+      }
     ]
   }
 }
@@ -205,11 +216,22 @@ Claude Code passes a JSON payload via stdin to each hook. `ntfyScheduler` reads 
 ```json
 {
   "session_id": "abc123",
-  "hook_event_name": "UserPromptSubmit"
+  "hook_event_name": "UserPromptSubmit",
+  "transcript_path": "/Users/you/.claude/projects/.../abc123.jsonl"
 }
 ```
 
-The `send` command extracts `message`, `title`, and `session_id` from the payload. The `cancel` command extracts `session_id`. Any field explicitly passed as a flag takes precedence over the stdin value.
+**PreToolUse hook payload:**
+```json
+{
+  "session_id": "abc123",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "transcript_path": "/Users/you/.claude/projects/.../abc123.jsonl"
+}
+```
+
+The `send` command extracts `message`, `title`, `session_id`, and `transcript_path` from the payload. The `cancel` command extracts `session_id` and falls back to matching on `transcript_path` if needed. Any field explicitly passed as a flag takes precedence over the stdin value.
 
 ### Notification lifecycle
 
@@ -225,10 +247,13 @@ ntfyScheduler send ... --delay 30
         │
         ├── [You respond within 30s]
         │         │
-        │         ▼
-        │   ntfyScheduler cancel -
-        │         │
-        │         └── Kills background process → no notification sent
+        │         ├── UserPromptSubmit (new message)
+        │         └── PreToolUse (permission approval)
+        │                   │
+        │                   ▼
+        │         ntfyScheduler cancel -
+        │                   │
+        │                   └── Kills background process → no notification sent
         │
         └── [You don't respond within 30s]
                   │
