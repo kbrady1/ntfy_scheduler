@@ -122,7 +122,9 @@ When disabled, `send` exits silently without making any network request.
 
 ### Hook configuration
 
-Add the following to your Claude Code settings file at `~/.claude/settings.json`:
+The easiest way to configure hooks is interactively inside Claude Code. Run `/hooks` in any Claude Code session and it will walk you through adding, editing, and removing hooks via a menu-driven UI — no need to edit JSON by hand.
+
+Alternatively, add the following directly to `~/.claude/settings.json`:
 
 ```json
 {
