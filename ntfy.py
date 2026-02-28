@@ -42,6 +42,21 @@ def cmd_send(args):
         print("Notifications are disabled. Run 'ntfy enable' to re-enable.")
         return
 
+    message = args.message
+
+    # When message is "-", read Claude Code hook JSON from stdin and extract
+    # the "message" field (falls back to raw stdin if not valid JSON).
+    if message == "-":
+        raw = sys.stdin.read().strip()
+        try:
+            payload = json.loads(raw)
+            message = payload.get("message") or raw
+            # Use hook title as fallback if --title not provided
+            if not args.title:
+                args.title = payload.get("title")
+        except json.JSONDecodeError:
+            message = raw
+
     url = f"https://ntfy.sh/{args.topic}"
     headers = {}
 
@@ -52,7 +67,7 @@ def cmd_send(args):
     if args.tags:
         headers["Tags"] = args.tags
 
-    body = args.message.encode("utf-8")
+    body = message.encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
 
     try:
@@ -80,7 +95,10 @@ def main():
     # send
     send_parser = subparsers.add_parser("send", help="Send a notification.")
     send_parser.add_argument("topic", help="ntfy.sh topic name (used as URL path).")
-    send_parser.add_argument("message", help="Notification message body.")
+    send_parser.add_argument(
+        "message",
+        help="Notification message body. Pass '-' to read from stdin (Claude Code hook JSON).",
+    )
     send_parser.add_argument("--title", "-t", help="Notification title.")
     send_parser.add_argument(
         "--priority",
