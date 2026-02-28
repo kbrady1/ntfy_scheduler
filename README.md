@@ -95,13 +95,13 @@ Print all pending scheduled notifications.
 ntfyScheduler list
 ```
 
-Output includes session ID, PID, TTL (time remaining until the notification fires), and status:
+Output includes session ID, PID, TTL (time remaining until the notification fires), status, and the working directory of the session that triggered the notification:
 
 ```
-SESSION ID                               PID      TTL      STATUS
-----------------------------------------------------------------------
-abc123                                   71433    44s      pending
-def456                                   71620    113s     pending
+SESSION ID                               PID      TTL      STATUS         DIR
+------------------------------------------------------------------------------------------
+abc123                                   71433    44s      pending        /Users/you/ios
+def456                                   71620    113s     pending        /Users/you/android
 ```
 
 A status of `already fired` means the process finished naturally but the state entry wasn't cleaned up yet.

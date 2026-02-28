@@ -114,6 +114,8 @@ def cmd_send(args):
     session_id = args.session_id
     title = args.title
 
+    cwd = None
+
     # Read Claude Code hook JSON from stdin when message is "-"
     if message == "-":
         payload = parse_hook_stdin()
@@ -123,7 +125,7 @@ def cmd_send(args):
         if not title:
             title = payload.get("title")
         # Prepend project name (basename of cwd) to title for easy identification
-        # when running multiple agents, e.g. "ntfy_scheduler · Permission needed"
+        # when running multiple agents, e.g. "ntfy_scheduler - Permission needed"
         cwd = payload.get("cwd")
         if cwd:
             project = os.path.basename(cwd)
@@ -160,6 +162,7 @@ def cmd_send(args):
             "pid": proc.pid,
             "scheduled_at": time.time(),
             "delay": args.delay,
+            "cwd": cwd,
         }
         save_state(state)
         print(f"Notification scheduled in {args.delay}s for session {session_id} (PID {proc.pid}).")
@@ -218,8 +221,8 @@ def cmd_list(args):
     if not state:
         print("No pending notifications.")
         return
-    print(f"{'SESSION ID':<40} {'PID':<8} {'TTL':<8} STATUS")
-    print("-" * 70)
+    print(f"{'SESSION ID':<40} {'PID':<8} {'TTL':<8} {'STATUS':<14} DIR")
+    print("-" * 90)
     for session_id, entry in state.items():
         pid = get_pid(entry)
         try:
@@ -234,7 +237,8 @@ def cmd_list(args):
         else:
             ttl = "-"
 
-        print(f"{session_id:<40} {pid:<8} {ttl:<8} {status}")
+        cwd = entry.get("cwd", "") if isinstance(entry, dict) else ""
+        print(f"{session_id:<40} {pid:<8} {ttl:<8} {status:<14} {cwd}")
 
 
 def cmd_cancel_all(args):
