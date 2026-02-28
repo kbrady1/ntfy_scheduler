@@ -183,14 +183,52 @@ def cmd_cancel(args):
         # Nothing pending — silently succeed so the hook doesn't error
         return
 
+    killed = kill_session(session_id, pid, state)
+    save_state(state)
+    if killed:
+        print(f"Cancelled notification for session {session_id} (PID {pid}).")
+    else:
+        print(f"Already fired: {session_id}.")
+
+
+def kill_session(session_id, pid, state):
+    """Kill a pending process and remove it from state. Returns True if killed."""
     try:
         os.kill(pid, signal.SIGTERM)
-        print(f"Cancelled notification for session {session_id} (PID {pid}).")
+        killed = True
     except ProcessLookupError:
-        # Process already finished and sent the notification — that's fine
-        pass
-
+        killed = False
     del state[session_id]
+    return killed
+
+
+def cmd_list(args):
+    state = load_state()
+    if not state:
+        print("No pending notifications.")
+        return
+    print(f"{'SESSION ID':<40} {'PID':<8} STATUS")
+    print("-" * 60)
+    for session_id, pid in state.items():
+        try:
+            os.kill(pid, 0)  # signal 0 checks existence without killing
+            status = "pending"
+        except ProcessLookupError:
+            status = "already fired"
+        print(f"{session_id:<40} {pid:<8} {status}")
+
+
+def cmd_cancel_all(args):
+    state = load_state()
+    if not state:
+        print("No pending notifications.")
+        return
+    for session_id, pid in list(state.items()):
+        killed = kill_session(session_id, pid, state)
+        if killed:
+            print(f"Cancelled {session_id} (PID {pid}).")
+        else:
+            print(f"Already fired: {session_id}.")
     save_state(state)
 
 
@@ -253,6 +291,14 @@ def main():
         help="Session ID to cancel. Pass '-' to read from Claude Code hook stdin JSON.",
     )
     cancel_parser.set_defaults(func=cmd_cancel)
+
+    # list
+    list_parser = subparsers.add_parser("list", help="List all pending scheduled notifications.")
+    list_parser.set_defaults(func=cmd_list)
+
+    # cancel-all
+    cancel_all_parser = subparsers.add_parser("cancel-all", help="Cancel all pending scheduled notifications.")
+    cancel_all_parser.set_defaults(func=cmd_cancel_all)
 
     # enable
     enable_parser = subparsers.add_parser("enable", help="Enable notifications globally.")
