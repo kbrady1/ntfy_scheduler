@@ -156,7 +156,11 @@ def cmd_send(args):
         )
 
         state = load_state()
-        state[session_id] = proc.pid
+        state[session_id] = {
+            "pid": proc.pid,
+            "scheduled_at": time.time(),
+            "delay": args.delay,
+        }
         save_state(state)
         print(f"Notification scheduled in {args.delay}s for session {session_id} (PID {proc.pid}).")
     else:
@@ -177,13 +181,14 @@ def cmd_cancel(args):
         sys.exit(1)
 
     state = load_state()
-    pid = state.get(session_id)
+    entry = state.get(session_id)
 
-    if pid is None:
+    if entry is None:
         # Nothing pending — silently succeed so the hook doesn't error
         return
 
-    killed = kill_session(session_id, pid, state)
+    pid = get_pid(entry)
+    killed = kill_session(session_id, entry, state)
     save_state(state)
     if killed:
         print(f"Cancelled notification for session {session_id} (PID {pid}).")
@@ -191,8 +196,14 @@ def cmd_cancel(args):
         print(f"Already fired: {session_id}.")
 
 
-def kill_session(session_id, pid, state):
+def get_pid(entry):
+    """Return PID from a state entry (supports legacy int and current dict format)."""
+    return entry["pid"] if isinstance(entry, dict) else entry
+
+
+def kill_session(session_id, entry, state):
     """Kill a pending process and remove it from state. Returns True if killed."""
+    pid = get_pid(entry)
     try:
         os.kill(pid, signal.SIGTERM)
         killed = True
@@ -207,15 +218,23 @@ def cmd_list(args):
     if not state:
         print("No pending notifications.")
         return
-    print(f"{'SESSION ID':<40} {'PID':<8} STATUS")
-    print("-" * 60)
-    for session_id, pid in state.items():
+    print(f"{'SESSION ID':<40} {'PID':<8} {'TTL':<8} STATUS")
+    print("-" * 70)
+    for session_id, entry in state.items():
+        pid = get_pid(entry)
         try:
             os.kill(pid, 0)  # signal 0 checks existence without killing
             status = "pending"
         except ProcessLookupError:
             status = "already fired"
-        print(f"{session_id:<40} {pid:<8} {status}")
+
+        if isinstance(entry, dict) and status == "pending":
+            remaining = int(entry["scheduled_at"] + entry["delay"] - time.time())
+            ttl = f"{max(0, remaining)}s"
+        else:
+            ttl = "-"
+
+        print(f"{session_id:<40} {pid:<8} {ttl:<8} {status}")
 
 
 def cmd_cancel_all(args):
@@ -223,8 +242,9 @@ def cmd_cancel_all(args):
     if not state:
         print("No pending notifications.")
         return
-    for session_id, pid in list(state.items()):
-        killed = kill_session(session_id, pid, state)
+    for session_id, entry in list(state.items()):
+        pid = get_pid(entry)
+        killed = kill_session(session_id, entry, state)
         if killed:
             print(f"Cancelled {session_id} (PID {pid}).")
         else:

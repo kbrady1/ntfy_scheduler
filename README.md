@@ -87,9 +87,30 @@ ntfyScheduler send my_topic - --title "Claude Code" --tags "hammer_and_wrench" -
 
 ---
 
+### `list`
+
+Print all pending scheduled notifications.
+
+```sh
+ntfyScheduler list
+```
+
+Output includes session ID, PID, TTL (time remaining until the notification fires), and status:
+
+```
+SESSION ID                               PID      TTL      STATUS
+----------------------------------------------------------------------
+abc123                                   71433    44s      pending
+def456                                   71620    113s     pending
+```
+
+A status of `already fired` means the process finished naturally but the state entry wasn't cleaned up yet.
+
+---
+
 ### `cancel`
 
-Cancel a pending scheduled notification by session ID.
+Cancel a specific pending notification by session ID.
 
 ```sh
 ntfyScheduler cancel <session-id>
@@ -102,6 +123,16 @@ ntfyScheduler cancel -
 ```
 
 If no notification is pending for the session, the command exits silently (safe to call unconditionally from a hook).
+
+---
+
+### `cancel-all`
+
+Cancel every pending scheduled notification at once.
+
+```sh
+ntfyScheduler cancel-all
+```
 
 ---
 
